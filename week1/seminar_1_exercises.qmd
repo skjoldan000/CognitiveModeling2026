@@ -1,0 +1,50 @@
+---
+title: "seminar_1_exercises"
+author: "esm"
+format: html
+editor: visual
+---
+
+## Seminar 1 exercises
+
+Topic of the week is Signal Detection Theory (SDT). Calculations will be based on Stanislaw (1999).
+
+Aim to complete at least the first 8 exercises.
+
+Exercises 9 and 10 are extra if you finish early.
+
+Load any packages you need. I like to work within the tidyverse; you can use any framework you prefer, but I will probably have an easier time helping out if it is within the tidyverse.
+
+Also, we will use a seed to get identical random values.
+
+```{r, echo=FALSE}
+library(tidyverse)
+set.seed(42)
+```
+
+1.  Familiarise yourself with the formulas and assumptions presented in Stanislaw (1999).
+
+2.  You will need the functions rnorm(), dnorm(), pnorm() and qnorm() for the following exercises.
+
+3.  We need to simulate some data to work with. Consider the stated assumptions of SDT, and generate data based on these. You should end up with data from 20 each of noise and signal trials. Choose a d' and criterion that leads to imperfect performance for both signal and noise trials.\
+    It is often nice to organise experimental data in long format in a data frame, with 1 row per trial.
+
+4.  Implement the functions described by Stanislaw to recapture the simulation parameters d', c, and the criterion from the simulated data.
+
+5.  Plot out the true distributions from which the data was generated, and then overlay the estimated distributions and criterion on top.
+
+6.  Re-simulate your experiment and estimate your simulation parameters for scenarios with 10, 50, 100, and 500 trials of each type.
+
+    1.  Plot out discrepancies between true parameter values and estimated parameter values for each scenario.
+
+    2.  What happens if we happen to get 100% hit rate or false alarm rate? How might we adjust for this scenario?
+
+    3.  What is an issue with this fairly simple approach to estimating d' and the criterion?
+
+7.  Stanislaw (1999) spends mainly discusses equal-variance SDT models, where it is assumed the noise added to signal and noise trials has identical variance. With the worked example, is this assumption testable? Why/why not?
+
+8.  Within the framework of SDT, why is it advantageous to separate the observed performance into d' and a criterion?
+
+9.  Simulate a separate task with 5 graded ordinal response, corresponding to weak through strong experiences of seeing a target (a perceptual awareness scale). Plot the receiver operating characteristic (ROC) from the simulated data.
+
+10. Can you think of advantages and disadvantages of providing more than 2 possible response options? Both from a statistical and an experimental/data quality point of view.
