@@ -17,14 +17,16 @@ Load any packages you need. I like to work within the tidyverse; you can use any
 
 Also, we will use a seed to get identical random values.
 
-```{r, echo=FALSE}
+```{r}
+#| message: false
+#| warning: false
 library(tidyverse)
 set.seed(42)
 ```
 
 1.  Familiarise yourself with the formulas and assumptions presented in Stanislaw (1999).
 
-2.  You will need the functions rnorm(), dnorm(), pnorm() and qnorm() for the following exercises.
+2.  You will need the functions rnorm(), dnorm(), pnorm() and qnorm() for the following exercises. Construct a plot that shows your understanding of each function.
 
 3.  We need to simulate some data to work with. Consider the stated assumptions of SDT, and generate data based on these. You should end up with data from 20 each of noise and signal trials. Choose a d' and criterion that leads to imperfect performance for both signal and noise trials.\
     It is often nice to organise experimental data in long format in a data frame, with 1 row per trial.
