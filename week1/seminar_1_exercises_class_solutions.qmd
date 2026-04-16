@@ -1,0 +1,132 @@
+---
+title: "seminar_1_exercises"
+author: "esm"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Seminar 1 exercises
+
+Topic of the week is Signal Detection Theory (SDT). Calculations will be based on Stanislaw (1999).
+
+Aim to complete at least the first 8 exercises.
+
+Exercises 9 and 10 are extra if you finish early.
+
+Load any packages you need. I like to work within the tidyverse; you can use any framework you prefer, but I will probably have an easier time helping out if it is within the tidyverse.
+
+Also, we will use a seed to get identical random values.
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+set.seed(42)
+```
+
+1.  Familiarise yourself with the formulas and assumptions presented in Stanislaw (1999): in particular look at formulas for d' and the criterion.
+
+2.  You will need the functions rnorm(), dnorm(), pnorm() and qnorm() for the following exercises. Construct a plot that shows your understanding of each function.
+
+```{r}
+    # rnorm(), dnorm()
+
+tibble(
+      xsamp = rnorm(n=1000, mean = 0, sd = 1), # draw 1000 samples from normal distribution
+      x = seq(-3, 3, length.out = 1000), # sequence of x values between -3 and 3, equal dist between each
+      dens = dnorm(x), # normal density at each x value
+    ) %>% 
+      ggplot(mapping = aes(x = xsamp))+ # "aes()" tells ggplot what to plot on the x and y axis
+      geom_histogram(aes(y = after_stat(density)), bins = 25, color = "black", fill = "white")+ # plot a histogram of samples
+      geom_line(aes(x = x, y = dens), color = "red")+ 
+      geom_vline(xintercept = .5, color = "black") +# draw a vertical line at a given value
+      theme_minimal()+
+      ylab("Probability density")
+```
+
+```{r}
+lt <- -1 # defien lower and upper bounding values
+ut <- 1 
+prob <- pnorm(1) - pnorm(-1) # calc area of density between bounding values
+
+tibble(
+  x = seq(-3, 3, length.out = 1000),
+  dens = dnorm(x)
+  ) %>% 
+  ggplot(aes(x))+
+    geom_line(aes(x = x, y = dens), color = "red")+ 
+    geom_ribbon(
+      data = . %>% filter( # filter our full dataset to only include between bounding values, to plot the area
+        x >= lt & x <= ut 
+      ),
+      aes(ymin = 0, ymax = dens),
+      alpha = .5, fill = "pink"
+      )+
+    theme_minimal()+
+    ggtitle(str_glue("There is {prob %>% round(3)} of sampling a value between {lt} and {ut}"))
+```
+
+```{r}
+target_prob <- .3 # define target probability
+bounding_value <- qnorm(target_prob) # calculate bounding value below which the target_prob is found
+
+tibble(
+  x = seq(-3, 3, length.out = 1000),
+  dens = dnorm(x)
+  ) %>% 
+  ggplot(aes(x))+
+    geom_line(aes(x = x, y = dens), color = "red")+ 
+    geom_ribbon(
+      data = . %>% filter(
+        x <= bounding_value # filter vals below bounding_value to plot area
+      ),
+      aes(ymin = 0, ymax = dens),
+      alpha = .5, fill = "pink"
+      )+
+    theme_minimal()+
+    ggtitle(str_glue("There is {target_prob %>% round(3)} prob of sampling a value below {bounding_value %>% round(3)}"))
+```
+
+3.  We need to simulate some data to work with. Consider the stated assumptions of SDT, and generate data based on these. You should end up with data from 20 each of noise and signal trials. Choose a d' and criterion that leads to imperfect performance for both signal and noise trials. Assume equal variance SDT; signal and noise produce noise of same magnitude.\
+    It is often nice to organise experimental data in long format in a data frame, with 1 row per trial.
+
+```{r}
+
+simdata <- function(ntrials, dprime, criterion){
+  trial_type <- rep(c(0, 1), each = ntrials) # 0 is a noise trial, 1 is a signal trial
+latent <- rnorm(n = length(trial_type), mean = trial_type*dprime) # simulate a latent value, corresponding to the strenght of the perceptual experience of the research participant. Note: we never see this value in real life, hence it is called latent. 
+resp <- if_else(latent>criterion, 1, 0) # The research participant checks if latent value is above the criterion and answers 1 for "yes, i saw the target", else 0
+  
+# we construct a tibble (dataframe) from the 3 vars, and return it. Note: we dont actually explicitly need to write "return", an r funciton will always return the last value/data structure
+  tibble( 
+    trial_type,
+    latent,
+    resp
+  )
+}
+
+d <- simdata(ntrials = 20, dprime = 1, criterion = 0.5)
+d
+```
+
+4.  Implement the functions described by Stanislaw to recapture the simulation parameters d', c, and the criterion from the simulated data.
+
+5.  Plot out the true distributions from which the data was generated, and then overlay the estimated distributions and criterion on top.
+
+6.  Re-simulate your experiment and estimate your simulation parameters for scenarios with 10, 50, 100, and 500 trials of each type.
+
+    1.  Plot out discrepancies between true parameter values and estimated parameter values for each scenario.
+
+    2.  What happens if we happen to get 100% hit rate or false alarm rate? How might we adjust for this scenario?
+
+    3.  What is an issue with this fairly simple approach to estimating d' and the criterion?
+
+7.  Stanislaw (1999) spends mainly discusses equal-variance SDT models, where it is assumed the noise added to signal and noise trials has identical variance. With the worked example, is this assumption testable? Why/why not?
+
+8.  Within the framework of SDT, why is it advantageous to separate the observed performance into d' and a criterion?
+
+9.  Simulate a separate task with 5 graded ordinal response, corresponding to weak through strong experiences of seeing a target (a perceptual awareness scale). Plot the receiver operating characteristic (ROC) from the simulated data.
+
+10. Can you think of advantages and disadvantages of providing more than 2 possible response options? Both from a statistical and an experimental/data quality point of view.
