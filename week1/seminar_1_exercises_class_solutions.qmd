@@ -41,7 +41,6 @@ tibble(
       ggplot(mapping = aes(x = xsamp))+ # "aes()" tells ggplot what to plot on the x and y axis
       geom_histogram(aes(y = after_stat(density)), bins = 25, color = "black", fill = "white")+ # plot a histogram of samples
       geom_line(aes(x = x, y = dens), color = "red")+ 
-      geom_vline(xintercept = .5, color = "black") +# draw a vertical line at a given value
       theme_minimal()+
       ylab("Probability density")
 ```
@@ -49,7 +48,7 @@ tibble(
 ```{r}
 lt <- -1 # defien lower and upper bounding values
 ut <- 1 
-prob <- pnorm(1) - pnorm(-1) # calc area of density between bounding values
+prob <- pnorm(1) - pnorm(-1) # also called the Phi() function, calc area of density between bounding values 
 
 tibble(
   x = seq(-3, 3, length.out = 1000),
@@ -70,7 +69,7 @@ tibble(
 
 ```{r}
 target_prob <- .3 # define target probability
-bounding_value <- qnorm(target_prob) # calculate bounding value below which the target_prob is found
+bounding_value <- qnorm(target_prob) # also called the inverse Phi() function, calculate bounding value below which the target_prob is found
 
 tibble(
   x = seq(-3, 3, length.out = 1000),
@@ -92,36 +91,94 @@ tibble(
 3.  We need to simulate some data to work with. Consider the stated assumptions of SDT, and generate data based on these. You should end up with data from 20 each of noise and signal trials. Choose a d' and criterion that leads to imperfect performance for both signal and noise trials. Assume equal variance SDT; signal and noise produce noise of same magnitude.\
     It is often nice to organise experimental data in long format in a data frame, with 1 row per trial.
 
-```{r}
 
-simdata <- function(ntrials, dprime, criterion){
-  trial_type <- rep(c(0, 1), each = ntrials) # 0 is a noise trial, 1 is a signal trial
-latent <- rnorm(n = length(trial_type), mean = trial_type*dprime) # simulate a latent value, corresponding to the strenght of the perceptual experience of the research participant. Note: we never see this value in real life, hence it is called latent. 
-resp <- if_else(latent>criterion, 1, 0) # The research participant checks if latent value is above the criterion and answers 1 for "yes, i saw the target", else 0
+```{r}
+n <- 20 # antal af hver type trial
+dprime <- 1.25
+criterion <- 0.5
+set.seed(1)
+
+sim_sdt <- function(n_each, dprime, criterion){
+  trial_type <- rep(c(0, 1), each = n_each) # vector der beskriver trialtypen; 0: noise trial, 1: signal trial
+  latent <- rnorm(n = n_each*2, mean = trial_type*dprime, sd = 1) # simulate 1 latent værdi, som svarer til "styrken af oplevensen" som forsøgspersonen har. Denne skal være et sample fra en normalfordeling, hvor mu afhænger af trial_type
+  resp <- if_else(latent >= criterion, 1, 0) # binært response fra forsøgsperson, e.g. 0: "nej#, 1: "ja". defineret afhængigt af om den latente værdi overstiger jeres criterion.
   
-# we construct a tibble (dataframe) from the 3 vars, and return it. Note: we dont actually explicitly need to write "return", an r funciton will always return the last value/data structure
-  tibble( 
-    trial_type,
-    latent,
-    resp
+  tibble( # en r function returnere implicit sidste værdi
+    trial_type, latent, resp
   )
 }
 
-d <- simdata(ntrials = 20, dprime = 1, criterion = 0.5)
-d
+d <- sim_sdt(n_each = 20, dprime = dprime, criterion = criterion)
+
+d %>% 
+  group_by(trial_type) %>% 
+  summarise(
+    rate = mean(resp)
+  )
+
+
 ```
 
 4.  Implement the functions described by Stanislaw to recapture the simulation parameters d', c, and the criterion from the simulated data.
 
+```{r}
+
+```
+
 5.  Plot out the true distributions from which the data was generated, and then overlay the estimated distributions and criterion on top.
 
 6.  Re-simulate your experiment and estimate your simulation parameters for scenarios with 10, 50, 100, and 500 trials of each type.
+```{r}
 
-    1.  Plot out discrepancies between true parameter values and estimated parameter values for each scenario.
+reps <- 100
+n_trials <- c(10, 50, 100, 500)
 
-    2.  What happens if we happen to get 100% hit rate or false alarm rate? How might we adjust for this scenario?
+est_dprimes <- vector(mode = "numeric",length = length(n_trials)*reps) # init empty vector to store dprimes
+est_criterions <- vector(mode = "numeric",length = length(n_trials)*reps) # alternatively, init vector with known lenght and type, and index into it to store vals
+rep_ntrials <- vector(mode = "numeric",length = length(n_trials)*reps)
 
-    3.  What is an issue with this fairly simple approach to estimating d' and the criterion?
+for (i in 1:length(n_trials)){
+  for (j in 1:reps){
+    
+    idx <- i + i*(j-1)
+    this_run_ntrials <- n_trials[i]
+    d <- sim_sdt(n_each = this_run_ntrials, dprime = dprime, criterion = criterion)
+    
+    dsum <- d %>% group_by(trial_type) %>% 
+      summarise(rate = mean(resp))
+    HR <- dsum %>% filter(trial_type==1) %>% pull(rate)
+    FR <- dsum %>% filter(trial_type==0) %>% pull(rate)
+    
+    this_run_dprime <- qnorm(HR)-qnorm(FR)
+    this_run_criterion <- qnorm(1-FR)
+    
+    # store results
+    rep_ntrials[i] <- this_run_ntrials
+    est_dprimes[i] <- this_run_dprime
+    est_criterions[i] <- this_run_criterion
+  }
+}
+simreps <- tibble(rep_ntrials,
+  est_dprimes,
+  est_criterions)
+
+simreps %>% 
+  pivot_longer(c(est_dprimes, est_criterions), names_to = "var", values_to = "vals") %>% 
+  ggplot(aes(y = vals, x = factor(rep_ntrials), colour = var))+
+    geom_boxplot()+
+  facet_wrap(~var)
+```
+
+
+a.  Plot out discrepancies between true parameter values and estimated parameter values for each scenario.
+
+```{r}
+
+```
+
+b.  What happens if we happen to get 100% hit rate or false alarm rate? How might we adjust for this scenario?
+
+b.  What is an issue with this fairly simple approach to estimating d' and the criterion?
 
 7.  Stanislaw (1999) spends mainly discusses equal-variance SDT models, where it is assumed the noise added to signal and noise trials has identical variance. With the worked example, is this assumption testable? Why/why not?
 
