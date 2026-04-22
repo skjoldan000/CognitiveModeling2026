@@ -27,7 +27,7 @@ library(rtdists)
 
 2.  Make yourself familiar with the package rtdists. Have a close look at the documentation page and identify the purpose of the different functions related to the LBA model.
 
-3.  We begin parameter estimation with a simulated dataset (parameter recovery). The advantage of using simulated data is that we can readily assess quality of the parameter estimates, as we know the true parameter values.\
+3.  Like last week, we will first simulate some data, which we will then later attempt to estimate the parameters of. The advantage of using simulated data is that we can readily assess quality of the parameter estimates, as we know the true parameter values.\
     For this, we simulate four conditions in a 2 × 2 factorial design, where the first factor is difficulty and the second factor is a speed-accuracy instruction. That is, in half of the conditions the accumulation rate will be low/high and, crossed with this, the threshold will be low/high in half of the conditions. We could use the following parameter values:
 
 ```{r}
