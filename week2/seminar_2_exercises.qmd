@@ -1,0 +1,58 @@
+---
+title: "seminar_2_exercises"
+format: html
+editor: visual
+---
+
+The goal of this week’s seminar is to estimate parameters from data. The data can be simulated or real. When estimating parameters of simulated data, the main goal is to assess how well the known parameters can be recovered during the parameter estimation stage (parameter recovery).
+
+For the weekly assignment, complete up to and including exercise 7.\
+8-10 are extra if you are fast, but not required for the hand-in.
+
+Note: The package rtdists have implemented some of the functions we will need to work with the LBA model. Install this package.
+
+```{r}
+library(tidyverse)
+library(rtdists)
+```
+
+1.  Before we start with fitting LBA, we need a bit of practice to get in the right mindset. We will start by fitting the parameters of a normal distribution with the same iterative method.\
+    I have left 10 samples from a normal distribution below in the var xsamps; you need to estimate the most likely values of mu and sigma which I used.\
+    For this we need a function which returns $L(\theta|data)$, where $\theta = \mu, \sigma$ (hint: you can you one of the 4 \*norm() functions we used last week). Once we have this function, we will use Simplex to estimate the maximum likelihood parameters. We don't need to implement Simplex, as it is available in the base R optim() function. Note, however, that optim() performs minimisation, so adjust your new objective function to return the negative log-likelihood rather than just likelihood: negative to ensure we are finding the most likely parameter values (optim() is minimising), and log for the stability reasons we discussed in the lecture.\
+    Finally, feed some starting $\theta$ values, the objective function, and the sampled data to optim(par = par_init, fn = objective_func, data = xsamps). On the first run, optim() may return some warnings; consider if we should place some restrictions on any of our parameters, and how we might do that.
+
+    ```{r}
+    xsamps <-  c(9.113, 3.306, 6.089, 6.899, 6.213, 4.682, 9.535, 4.716, 11.055, 4.812)
+    ```
+
+2.  Make yourself familiar with the package rtdists. Have a close look at the documentation page and identify the purpose of the different functions related to the LBA model.
+
+3.  We begin parameter estimation with a simulated dataset (parameter recovery). The advantage of using simulated data is that we can readily assess quality of the parameter estimates, as we know the true parameter values.\
+    For this, we simulate four conditions in a 2 × 2 factorial design, where the first factor is difficulty and the second factor is a speed-accuracy instruction. That is, in half of the conditions the accumulation rate will be low/high and, crossed with this, the threshold will be low/high in half of the conditions. We could use the following parameter values:
+
+```{r}
+data.frame(
+  Condition = c("speed instruction", "accuracy instruction"),
+  easy = c("b=2; v=(3, 1)", "b=3; v=(3, 1)"),
+  difficult = c("b=2; v=(2.5, 1.5)", "b=3; v=(2.5, 1.5)")
+) %>% print()
+```
+
+For all conditions, we set non-decision time $t_0=0.300$ \[s\], drift variation $s_v=1$, and starting point upper threshold $A=0.5$. Also, assume that $n=400$ responses were collected in each condition.
+
+3.  Now we have some simulated LBA data from 4 different experimental conditions, and we need an objective function which returns the neg log-likelihood of a set of proposed parameters, given the observed data: $-log(L(theta|data))$. To get started, it is often easier to break the problem down into smaller sizes: start by creating a filtered dataset with just one of the 4 considitions. Now write out the objective function for this filtered dataset, and fit it with optim(), as before. Compare the fitted parameters to those used for simulation.
+
+4.  Now create a new objective function, which accounts for the 2x2 design. Consider which parameters should be allowed to differ by condition, and which should be identical across conditions. Fit with optim().
+
+5.  Inspect the parameter estimates you got from Simplex. How well do they resemble the true parameters? Which parameters seem to be less and which seem to be more problematic?
+
+6.  A shortcoming of this approach of fitting a model to data which perfectly corresponds the generation model, is it does not represent what we would actually expect to see in the real world, if the model is a good approximation of the data generation process. For example, participants may be inattentive or districted in some trials, and we might want to know how well our fitting procedure handles such contaminated data.\
+    Create a contaminated dataset, in which 5% of responses are due to processes unrelated to perceptual decisions. To achieve this, substitute 5% of the responses simulated from the model by uniformly distributed RTs (0.1 to 1.5 seconds). Since these responses are non-informed guesses, assume that the correctness of the response can be modelled by a coin-toss.
+
+7.  Repeat the model fitting based on maximum likelihood.
+
+8.  Plot the estimated model from both perfect and contaminated datasets together with the corresponding simulated data to qualitatively assess the goodness-of-fit.
+
+9.  Repeat fitting, this time with quantile maximum likelihood instead of maximum likelihood. For QML, you need the quantiles from all responses (correct and incorrect) to create binned data. Based on these bins, calculate the probabilities for correct and incorrect responses. Do the same for model predictions, so you can calculate a goodness-of-fit value.\\ Compare the results of the two model fits.
+
+10. It is time to fit the LBA model to some real data. The package rtdists contains a dataset from speeded responses in a lexical decision task (Wagenmakers, Ratcliff, Gomez, & McKoon, 2008, Experiment 1).\\ In this experiment, participants gave speeded responses to lexical stimuli, indicating whether they were a word or not (non-word, created by substituting single characters from the words). Between blocks, the participants were instructed to be either accurate or fast. The second factor is word frequency; the stimulus material was divided up into high frequency words, low frequency words, and very low frequency words.
