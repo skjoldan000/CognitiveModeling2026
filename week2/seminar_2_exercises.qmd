@@ -23,6 +23,20 @@ library(rtdists)
 
     ```{r}
     xsamps <-  c(9.113, 3.306, 6.089, 6.899, 6.213, 4.682, 9.535, 4.716, 11.055, 4.812)
+
+    theta <- c(mu = 0, sigma = 1)
+    theta["mu"]
+
+    sum(log(dnorm(rnorm(1000), mean = 0, sd = 1))) # likelihood
+
+    neg_ll <- function(data, par){
+      if (par["sigma"] <= 0){
+        return(1e6)
+      }
+      -sum(dnorm(data, mean =par["mu"], sd = par["sigma"], log = TRUE))
+    }
+
+    optim(theta, fn = neg_ll, data = xsamps, control = list(maxit = 5000))
     ```
 
 2.  Make yourself familiar with the package rtdists. Have a close look at the documentation page and identify the purpose of the different functions related to the LBA model.
@@ -39,6 +53,11 @@ data.frame(
 ```
 
 For all conditions, we set non-decision time $t_0=0.300$ \[s\], drift variation $s_v=1$, and starting point upper threshold $A=0.5$. Also, assume that $n=400$ responses were collected in each condition.
+
+```{r}
+# def generation params
+rLBA() # for generating data
+```
 
 3.  Now we have some simulated LBA data from 4 different experimental conditions, and we need an objective function which returns the neg log-likelihood of a set of proposed parameters, given the observed data: $-log(L(theta|data))$. To get started, it is often easier to break the problem down into smaller sizes: start by creating a filtered dataset with just one of the 4 considitions. Now write out the objective function for this filtered dataset, and fit it with optim(), as before. Compare the fitted parameters to those used for simulation.
 

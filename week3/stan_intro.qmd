@@ -1,0 +1,319 @@
+---
+title: "stan_intro"
+author: "esm"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: inline
+---
+
+## Intro to Stan
+
+```{r}
+library(tidyverse)
+library(tidybayes)
+library(bayesplot)
+library(posterior)
+library(cmdstanr)
+library(patchwork)
+```
+
+```{r}
+set.seed(42)
+n <- 30
+d <- tibble(
+  x = rnorm(n = n, mean = 0, sd = 1),
+  y = 0 + 1*x + rnorm(n = n, mean = 0, sd = 1)
+)
+
+# Ask cmdstan to compile stan code
+m1 <- cmdstan_model("models/gaussian.stan")
+# Fit the model to data
+f1 <- m1$sample(
+  data = list(
+    N = n, # Number of obs
+    y = d$y # Outcome (no predictors here)
+  ),
+  iter_warmup = 500, # warmup samples, stan does autotuning of stepsizes etc.
+  iter_sampling = 1000,# actual inference samples
+  chains = 4
+)
+
+print(f1) #print summary
+
+mcmc_trace(f1$draws(c("mu", "sigma")))
+
+
+f1 %>% # plot posterior mu, sigma
+  gather_draws(mu, sigma) %>% 
+  ggplot(
+    aes(x = .value, color = .variable)
+  )+
+  stat_halfeye()+
+  facet_wrap(~.variable, scale = "free")
+
+f1 %>% 
+  spread_draws(mu, ndraws = 50) %>% 
+  ggplot()+
+  geom_point(data = d, aes(x,y))+
+  geom_abline(aes(intercept = mu, slope = 0, group = .draw), alpha = 0.2)
+```
+
+once we have the simple model working, we can increase the complexity
+```{r}
+m1b <- cmdstan_model("models/gaussian_linear.stan")
+
+
+f1b <- m1b$sample(
+  data = list(
+    N = n, 
+    y = d$y,
+    x = d$x
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+f1b %>% 
+  gather_draws(beta0, beta1, sigma) %>% 
+  ggplot(
+    aes(x = .value, color = .variable)
+  )+
+  stat_halfeye()+
+  facet_wrap(~.variable, scale = "free")
+
+f1b %>% 
+  spread_draws(beta0, beta1) %>%
+  ggplot(aes(beta0, beta1))+
+  geom_point()+
+  coord_equal()
+
+# Over samples from the posterior; notice we are not doing any stats on the posterior, we are just plotting random samples
+f1b %>% 
+  spread_draws(beta0, beta1, ndraws = 50) %>% 
+  ggplot()+
+  geom_point(data = d, aes(x,y))+
+  geom_abline(aes(intercept = beta0, slope = beta1, group = .draw), alpha = 0.2)
+```
+
+
+
+
+example of poorly sampling model
+```{r}
+m2 <- cmdstan_model("week3/models/funnel_centered.stan")
+f2 <- m2$sample(
+  data = list(),
+  iter_warmup = 500, # warmup samples, stan does autotuning of stepsizes etc.
+  iter_sampling = 1000, # actual inference samples
+  chains = 4
+)
+
+f2
+
+mcmc_trace(f2$draws(c("y", "x")))
+
+draws <- f2$draws()
+
+df <- as_draws_df(draws) |>
+  transmute(
+    chain = factor(.chain),
+    iteration = .iteration,
+    y = y,
+    x1 = `x[1]`
+  )
+boundary_df <- tibble(
+  y = seq(min(df$y), max(df$y), length.out = 300),
+  upper = 2 * exp(y / 2),
+  lower = -2 * exp(y / 2)
+)
+
+ggplot(df, aes(x = y, y = x1, color = chain)) +
+  geom_point(alpha = 0.45, size = 1) +
+  geom_line(
+    data = boundary_df,
+    aes(x = y, y = upper),
+    inherit.aes = FALSE,
+    linewidth = 1,
+    color = "black",
+    linetype = "dashed"
+  ) +
+  geom_line(
+    data = boundary_df,
+    aes(x = y, y = lower),
+    inherit.aes = FALSE,
+    linewidth = 1,
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Centered Neal's funnel",
+    subtitle = "Dashed lines show approximate ±2 exp(y / 2) boundaries",
+    x = "y",
+    y = "x[1]",
+    color = "Chain"
+  )
+```
+
+```{r}
+m2 <- cmdstan_model("week3/models/funnel_uncentered.stan")
+f2 <- m2$sample(
+  data = list(),
+  iter_warmup = 500, # warmup samples, stan does autotuning of stepsizes etc.
+  iter_sampling = 1000, # actual inference samples
+  chains = 4
+)
+
+f2
+
+mcmc_trace(f2$draws(c("y", "x")))
+
+draws <- f2$draws()
+
+df <- as_draws_df(draws) |>
+  transmute(
+    chain = factor(.chain),
+    iteration = .iteration,
+    y = y,
+    x1 = `x[1]`
+  )
+boundary_df <- tibble(
+  y = seq(min(df$y), max(df$y), length.out = 300),
+  upper = 2 * exp(y / 2),
+  lower = -2 * exp(y / 2)
+)
+
+ggplot(df, aes(x = y, y = x1, color = chain)) +
+  geom_point(alpha = 0.45, size = 1) +
+  geom_line(
+    data = boundary_df,
+    aes(x = y, y = upper),
+    inherit.aes = FALSE,
+    linewidth = 1,
+    color = "black",
+    linetype = "dashed"
+  ) +
+  geom_line(
+    data = boundary_df,
+    aes(x = y, y = lower),
+    inherit.aes = FALSE,
+    linewidth = 1,
+    color = "black",
+    linetype = "dashed"
+  ) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Centered Neal's funnel",
+    subtitle = "Dashed lines show approximate ±2 exp(y / 2) boundaries",
+    x = "y",
+    y = "x[1]",
+    color = "Chain"
+  )
+```
+
+
+
+The importance of prior and posterior predictive checks
+
+```{r}
+m3 <- cmdstan_model("models/prior_and_posterior_checks.stan")
+
+n3 <- 10
+d3 <- tibble(y = rbinom(n = 1, size = n3, prob = 0.75))
+
+f3a <- m3$sample(
+  data = list(
+    N = n3, 
+    y = d3$y,
+    prior_p_sigma = 5
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+f3b <- m3$sample(
+  data = list(
+    N = n3, 
+    y = d3$y,
+    prior_p_sigma = 1
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+
+pa <- f3a %>% 
+  spread_draws(y_sim) %>% 
+  count(y_sim) %>% 
+  mutate(prob = n / sum(n)) %>% 
+  ggplot(aes(x = y_sim, y = prob)) +
+  geom_col(color = "black", fill = "lightgrey") +
+  labs(
+    y = "Probability mass",
+    x = str_glue("N successes out of {n3}"),
+    title = "N(0, 5) prior on p",
+    subtitle = str_glue("y ~ binomial({n3}, Phi(p))")
+  ) +
+  theme_minimal() +
+  ylim(0, 0.4) +
+  scale_x_continuous(breaks = 0:n3)
+
+pb <- f3b %>% 
+  spread_draws(y_sim) %>% 
+  count(y_sim) %>% 
+  mutate(prob = n / sum(n)) %>% 
+  ggplot(aes(x = y_sim, y = prob)) +
+  geom_col(color = "black", fill = "lightgrey") +
+  labs(
+    y = "Probability mass",
+    x = str_glue("N successes out of {n3}"),
+    title = "N(0, 1) prior on p",
+    subtitle = str_glue("y ~ binomial({n3}, Phi(p))")
+  ) +
+  theme_minimal() +
+  ylim(0, 0.4) +
+  scale_x_continuous(breaks = 0:n3)
+
+pb+pa
+
+pbpos <- f3b %>% 
+  spread_draws(y_rep) %>% 
+  count(y_rep) %>% 
+  mutate(prob = n / sum(n)) %>% 
+  ggplot(aes(x = y_rep, y = prob)) +
+  geom_col() +
+  labs(
+    y = "Probability mass",
+    x = str_glue("N successes out of {n3}"),
+    title = "N(0, 1) prior on p",
+    subtitle = str_glue("y ~ binomial({n3}, Phi(p))")
+  ) +
+  theme_minimal() +
+  ylim(0, 0.4) +
+  scale_x_continuous(breaks = 0:n3)
+
+
+pbpos
+
+
+
+pmf_draws <- f3b %>% 
+  spread_draws(p) %>% 
+  crossing(y_rep = 0:n3) %>% 
+  mutate(prob = dbinom(y_rep, size = n3, prob = pnorm(p)))
+
+ggplot(pmf_draws, aes(x = y_rep, y = prob)) +
+  stat_pointinterval(.width = 0.95) +
+  labs(
+    y = "Posterior predictive probability mass",
+    x = str_glue("N successes out of {n3}"),
+    title = "Posterior predictive PMF",
+    subtitle = str_glue("y ~ binomial({n3}, Phi(p))")
+  ) +
+  theme_minimal() +
+  scale_x_continuous(breaks = 0:n3)
+```

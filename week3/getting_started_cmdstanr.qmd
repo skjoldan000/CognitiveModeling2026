@@ -1,0 +1,63 @@
+---
+title: "get_started_cmdstanr"
+author: "esm"
+format: html
+editor: visual
+---
+
+## Install cmdstanr (command stan r)
+
+First, make sure you are in a fresh session: Go to Session -\> Restart R.
+
+cmdstanr is not on cran, so we need to tell R where to install it from:
+
+```{r}
+install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
+```
+
+
+
+After installing, load the package:\
+
+```{r}
+library(cmdstanr)
+```
+
+to use cmdstanr, we need a C++ compiler. you may already have one, check with the following function:\
+
+```{r}
+check_cmdstan_toolchain()
+```
+
+if you get: "The C++ toolchain required for CmdStan is setup properly!", then you can skip the C++ compiler installation and go directly to Install cmdstan
+
+Install C++ compiler: If you are on windows, go to: (if you have an old version of rtools, uninstall it, and download the newest version)\
+https://cran.r-project.org/bin/windows/Rtools/rtools45/rtools.html\
+If you are on Linux or MacOS, go to link and follow the instructions here:\
+https://mc-stan.org/docs/cmdstan-guide/installation.html#cpp-toolchain
+
+once you have installed the C++ compiler, you can then install cmdstan:
+
+```{r}
+cmdstanr::install_cmdstan(overwrite = TRUE)
+```
+
+If you have any issues during the different steps, refer to the guide at:\
+<https://mc-stan.org/cmdstanr/articles/cmdstanr.html>\
+
+## Test cmdstanr
+
+Test the installation with an included example:
+
+```{r}
+file <- file.path(cmdstan_path(), "examples", "bernoulli", "bernoulli.stan")
+
+mod <- cmdstan_model(file, force_recompile = TRUE, quiet = FALSE)
+mod$print()
+```
+if the example model is printed, everything works!
+
+finally, install some convenience packages for working with the fits afterwards:
+```{r}
+install.packages("bayesplot", "posterior", "tidybayes")
+```
