@@ -1,0 +1,271 @@
+---
+title: "Seminar exercises week 3: Generalized Context Model"
+format: html
+editor: visual
+---
+
+# Seminar exercises week 3: Generalized Context Model
+
+The goal of these exercises is to estimate the MDS and GCM parameters from data, using maximum likelihood like last week.
+
+Aim to complete exercises 1 - 4. If you are fast, add exercises 5, but wait till after the introduction to Stan.
+
+```{r setup}
+library(tidyverse)
+
+theme_set(theme_minimal())
+
+```
+
+# Exercise 1
+
+Familiarize yourself with the multidimensional scaling (MDS) approach, as described in Nosofsky (1986).
+
+Exercise 1 is to estimate the MDS parameters for the 16 stimuli used in Nosofsky (1986) using maximum likelihood and Simplex as optimiser. The confusion matrix for subject 1 is provided below (simply copied from the paper).
+
+Think about how the maximum likelihood looks for discrete data\
+(counts of discrete categories).
+
+We will estimate the MDS parameters with dimensional attention weights (w_i) and psychology space scaling parameter (c).
+
+```{r exercise-1-data}
+
+nosofky_subj1<-matrix(
+  c(
+    250, 94, 0, 0, 192, 42, 0, 0, 7, 5, 0, 0, 0, 0, 0, 0,
+    50, 239, 90, 3, 50, 102, 49, 4, 3, 4, 0, 0, 0, 0, 0, 0,
+    0, 59, 258, 93, 3, 20, 113, 37, 0, 3, 4, 2, 0, 0, 0, 0,
+    0, 11, 137, 288, 0, 3, 60, 79, 0, 1, 6, 5, 0, 0, 0, 0,
+    29, 16, 0, 0, 341, 75, 7, 0, 122, 27, 2, 0, 6, 1, 0, 0,
+    2, 41, 36, 1, 70, 193, 97, 5, 30, 67, 35, 2, 0, 0, 1, 1,
+    0, 7, 48, 22, 5, 40, 226, 104, 0, 17, 61, 20, 0, 0, 0, 0,
+    0, 1, 26, 86, 0, 10, 110, 271, 0, 2, 39, 55, 0, 0, 2, 0,
+    0, 0, 0, 0, 58, 18, 0, 0, 351, 80, 4, 0, 82, 20, 1, 0,
+    1, 0, 1, 0, 13, 55, 40, 6, 77, 255, 95, 9, 16, 45, 19, 0,
+    0, 0, 2, 1, 1, 11, 73, 64, 1, 58, 213, 113, 0, 10, 52, 8,
+    0, 0, 0, 1, 0, 1, 32, 137, 0, 8, 120, 255, 0, 2, 19, 32,
+    0, 0, 0, 0, 1, 2, 1, 0, 111, 23, 1, 0, 309, 96, 6, 1,
+    0, 0, 0, 0, 1, 1, 4, 0, 31, 95, 51, 1, 49, 246, 96, 3,
+    0, 0, 0, 0, 0, 0, 8, 5, 1, 18, 105, 78, 2, 50, 234, 84,
+    0, 0, 0, 0, 0, 0, 1, 2, 0, 2, 56, 186, 0, 2, 101, 249
+  ), 
+  nrow = 16, 
+  byrow = TRUE
+)
+
+
+
+psych_attr <- 1:4
+
+stim_physical <- crossing(
+  angle = psych_attr,
+  size = psych_attr
+) %>% 
+  arrange(size, angle)
+
+stim_physical
+
+heatmapdf <- as.data.frame(as.table(nosofky_subj1))
+names(heatmapdf) <- c("row", "column", "value")
+
+heatmapdf$row <- as.numeric(heatmapdf$row)
+heatmapdf$column <- as.numeric(heatmapdf$column)
+
+heatmapdf %>% 
+  ggplot(aes(x = column, y = row, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(
+    option = "magma",
+    trans = "log1p"
+  ) +
+  geom_text(aes(label = value), size = 3)+
+  geom_vline(xintercept = seq(4, 12, by = 4)+.5, color = "red", size = 1)+
+  geom_hline(yintercept = seq(4, 12, by = 4)+.5, color = "red", size = 1)+
+  scale_y_reverse() +
+  coord_fixed() +
+  labs(
+    title = "Heatmap of subject 1 responses",
+    x = "Responses",
+    y = "Stimuli",
+    fill = "Count"
+  ) +
+  theme_minimal()
+```
+
+Here you get a bit of help to get started.
+
+First, a helper function to construct the pairwise comparison
+
+Then, the weighted distance function, and, finally, the similarity function.
+
+```{r exercise-1-functions}
+make_pairwise_matrices <- function(stim) {
+  crossing(
+    i = seq_len(nrow(stim)),
+    j = seq_len(nrow(stim))
+  )  %>% 
+    mutate(
+      angle_i = stim$angle[i],
+      angle_j = stim$angle[j],
+      size_i = stim$size[i],
+      size_j = stim$size[j]
+    )
+}
+
+# note: Distance is here simply euclidiean distance, but weighted by w_: subjects may weigh angle or size higher for their comparison.
+distance_gcm <- function(angle_i, angle_j, size_i, size_j, w_angle, r = 2) {
+  w_size <- 1 - w_angle 
+
+  (
+    w_angle * abs(angle_i - angle_j)^r +
+      w_size * abs(size_i - size_j)^r
+  )^(1 / r)
+}
+
+similarity_gcm <- function(distance, c, k = 2) {
+  exp(-c * distance^k)
+}
+```
+
+Here we define the forward function get_preds_mds, which produces a probability of responding j to stimulus i, given a set of parameters. Afterwards, we utilise the prediction function in our objective function: Remember, our goal here is to calculate how likely the current set of parameters are, given the observed data?\
+Compared to earlier examples, data is here in the form of a confusion matrix, but the approach is the same.
+
+```{r exercise-1-mds-prediction-function}
+get_preds_mds <- function(par, r = 2, k = 2) {
+  x_angle <- par[1:4] # unpack angle
+  x_size <- par[5:8] # unpack size
+  c_par <- par[9] # scaling par
+  w_angle <- par[10] # size/angle weighting par (w_size is 1-w_angle)
+  b <- c(1, par[11:25]) # 16 total stimuli, 16 response biases. first is fixed to 1, 15 free.
+
+  stim_mds <- crossing(
+    angle = x_angle,
+    size = x_size
+  ) %>%
+    arrange(size, angle)
+
+  pairwise <- make_pairwise_matrices(stim_mds) %>%
+    mutate(
+      distance = distance_gcm(
+        angle_i = angle_i,
+        angle_j = angle_j,
+        size_i = size_i,
+        size_j = size_j,
+        w_angle = w_angle,
+        r = r
+      ),
+      similarity = similarity_gcm(distance, c_par, k),
+      bias = b[j],
+      numerator = similarity * bias
+    ) %>%
+    group_by(i) %>%
+    mutate(pred = numerator / sum(numerator)) %>% # produces a valid probability distribution
+    ungroup()
+
+  pairwise %>%
+    select(i, j, pred) %>% 
+    pivot_wider(
+      names_from = j,
+      values_from = pred
+    ) %>%
+    select(-i) %>%
+    as.matrix() # return a matrix of same shape as our original data
+}
+
+objective_fun_mds <- function(par, data, r = 2, k = 2) {
+  if (par[9] < 0) {
+    return(1e6) # c must be greater than 0
+  }
+
+  if (par[10] < 0 | par[10] > 1) {
+    return(1e6) # w_angle must be 0 <= w_angle <= 1
+  }
+  
+  if (any(par[11:25] < 0)) {
+    return(1e6) # biases should be non-negative
+  }
+
+  pred <- get_preds_mds(par, r = r, k = k)
+
+  -sum(data * log(pred))
+}
+```
+
+# Exercise 2
+
+Compare the ML solution obtained in Exercise 1 with the observed data.
+
+Assess the goodness-of-fit of the estimated model. Do this first qualitatively with a plot of observed vs predicted counts, then quantify your assessment. R\^2 could be an option for this.
+
+# Exercise 3
+
+One of the strengths of Nosofsky’s (1986) approach is to estimate the coordinates of all stimuli in the 2D psychological space (angle × size) using independent data. These estimates are then used fixed during the estimation of GCM parameters.
+
+That is, we can now reuse our fitted values of Subject 1's psychological space when fitting the Generalised Context Model.
+
+First consider, which parameters remain to be estimated?
+
+Implement an iterative ML estimation using Simplex, starting with the first condition of the second part of the experiment described by Nosofsky (1986).
+
+Follow the principles outlined in the MDS fit. The data for parameter estimation is given in Table 3. The relevant data is in the first two columns of that table.
+
+Assess the quality of the fit quantitatively.
+
+```{r exercise-3-data}
+nosofky_subj1_cat_dim <- matrix(
+  c(
+    213, 4,
+    253, 1,
+    192, 2,
+    218, 1,
+    185, 57,
+    193, 47,
+    187, 40,
+    162, 36,
+    24, 194,
+    33, 198,
+    31, 190,
+    40, 181,
+    0, 204,
+    0, 235,
+    0, 220,
+    0, 258
+  ),
+  nrow = 16,
+  byrow = TRUE
+)
+
+cat_dim <- matrix(
+  cbind(
+    c(1, 0, 0, 1, 0, 1, 1, 0, rep(0, 8)),
+    c(rep(0, 8), 0, 1, 1, 0, 1, 0, 0, 1)
+  ),
+  nrow = 16
+)
+
+cat_dim
+```
+
+# Exercise 4
+
+Repeat Exercise 3, this time with the remaining three category structures investigated in the article.
+
+In addition, compare the parameter estimates of the four conditions/models.
+
+Which parameter is most relevant for comparison?
+
+# Exercise 5
+
+```{r}
+library(cmdstanr)
+```
+
+Fit the GCM with MCMC using Stan. The Stan file is provided on Absalon/github.
+
+Consider what would be reasonable priors to use.
+
+Compare the ML estimates with the posterior distribution obtained from Stan.
+
+```{r}
+stan_gcm <- cmdstan_model("models/gmc.stan") # you will need to define priors in the stan file before compilation
+```
