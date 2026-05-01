@@ -60,6 +60,7 @@ f1 %>%
 ```
 
 once we have the simple model working, we can increase the complexity
+
 ```{r}
 m1b <- cmdstan_model("models/gaussian_linear.stan")
 
@@ -97,10 +98,8 @@ f1b %>%
   geom_abline(aes(intercept = beta0, slope = beta1, group = .draw), alpha = 0.2)
 ```
 
-
-
-
 example of poorly sampling model
+
 ```{r}
 m2 <- cmdstan_model("week3/models/funnel_centered.stan")
 f2 <- m2$sample(
@@ -212,8 +211,6 @@ ggplot(df, aes(x = y, y = x1, color = chain)) +
     color = "Chain"
   )
 ```
-
-
 
 The importance of prior and posterior predictive checks
 

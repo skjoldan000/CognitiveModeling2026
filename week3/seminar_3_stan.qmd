@@ -1,0 +1,272 @@
+---
+title: "seminar_3_stan"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Stan intro
+
+load libraries
+
+```{r}
+library(tidyverse)
+library(tidybayes)
+library(bayesplot)
+library(posterior)
+library(cmdstanr)
+```
+
+We will start again by fitting the parameters of a Gaussian
+
+```{r}
+n <- 50
+d1 <- tibble(
+  y = rnorm(n = n, mean = 1, sd = 2)
+)
+
+m1 <- cmdstan_model("class_models/gaussian.stan")
+
+print(m1)
+
+f1 <- m1$sample(
+  data = list(
+    N = n,
+    y = d1$y
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  chains = 4,
+  parallel_chains = 4
+)
+
+mcmc_trace(f1$draws(c("b0", "sigma")))
+
+print(f1)
+
+f1 %>% 
+  gather_draws(c(b0, sigma)) %>% 
+  ggplot(aes(x = .value, color = .variable))+
+  stat_halfeye(.width = c(.5, .95))+
+  facet_wrap(~.variable)
+  
+f1 %>% 
+  spread_draws(c(b0, sigma)) %>% 
+  ggplot(aes(x = sigma, y = b0))+
+  geom_point()
+
+```
+
+```{r}
+simint <- 1
+simslope <- 2
+d2 <- tibble(
+  x = seq(-3, 3, length.out = n),
+  y = simint + simslope * x + rnorm(n = n, mean = 0, sd = 2)
+)
+d2 %>% 
+  ggplot(aes(x,y))+
+  geom_point()
+
+
+m2 <- cmdstan_model("week3/class_models/gaussian_linear.stan")
+
+print(m2)
+
+f2 <- m2$sample(
+  data = list(
+    N = n,
+    x = d2$x,
+    y = d2$y
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  chains = 4,
+  parallel_chains = 4
+)
+
+mcmc_trace(f2$draws(c("b0", "b1", "sigma")))
+
+f2 %>% 
+  gather_draws(c(b0, b1, sigma)) %>% 
+  ggplot(aes(x = .value, color = .variable))+
+  stat_halfeye(.width = c(.5, .95))+
+  facet_wrap(~.variable)
+
+
+
+f2 %>% 
+  gather_draws(c(b0, b1, sigma)) %>% 
+  ggplot(aes(x = .value, color = .variable))+
+  stat_halfeye(.width = c(.5, .95))+
+  facet_wrap(~.variable)
+
+d2 %>% 
+  ggplot(aes(x,y))+
+  geom_point()+
+  geom_abline(
+    data = f2 %>% spread_draws(c(b0, b1), ndraws = 50),
+    aes(intercept = b0, slope = b1)
+  )
+
+f2
+
+```
+
+
+```{r}
+m3 <- cmdstan_model("week3/class_models/funnel_centered.stan")
+
+m3
+
+f3 <- m3$sample(
+  data = list(),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  chains = 4,
+  parallel_chains = 4
+)
+
+mcmc_trace(f3$draws(c("y")))
+
+m4 <- cmdstan_model("week3/class_models/funnel_uncentered.stan")
+
+m4
+
+f4 <- m3$sample(
+  data = list(),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  chains = 4,
+  parallel_chains = 4
+)
+
+mcmc_trace(f3$draws(c("y")))
+
+```
+
+
+
+
+```{r}
+n <- 1000
+i <- 1:n
+trial_type <- sample(c(0, 1), size = n, replace = TRUE)
+criterion <- 0
+signal_mean <- 1
+obs_val <- rnorm(mean = trial_type*signal_mean, n = n)
+report <- if_else(obs_val > criterion, 1, 0)
+
+d <- tibble(
+  i,
+  trial_type,
+  obs_val,
+  report
+) %>% 
+  mutate(
+    cat = case_when(
+      trial_type == 1 & report == 1 ~ "hit",
+      trial_type == 1 & report == 0 ~ "miss",
+      trial_type == 0 & report == 0 ~ "correct rejection",
+      trial_type == 0 & report == 1 ~ "false alarm"
+    )
+  )
+
+d %>% 
+  count(trial_type, cat) %>% 
+  group_by(trial_type) %>% 
+  mutate(
+    rate = n / sum(n)
+  ) %>% 
+  ungroup()
+
+d %>% 
+  summarise(
+    hit_rate = mean(report[trial_type == 1]),
+    fa_rate = mean(report[trial_type == 0]),
+  ) %>% 
+  mutate(
+    dprime = qnorm(p = hit_rate) - qnorm(p = fa_rate),
+    c = -0.5 * (qnorm(p  = hit_rate) + qnorm(p = fa_rate)),
+    criterion = (dprime/2)+c
+  )
+
+m_sdt <- cmdstan_model("week3/class_models/sdt_simple.stan")
+
+
+f_sdt <- m_sdt$sample(
+  data = list(
+    N = n,
+    y = d$report,
+    x = d$trial_type
+  ),
+  iter_warmup = 500,
+  iter_sampling = 1000,
+  chains = 4,
+  parallel_chains = 4
+)
+
+f_sdt
+
+d %>% summarise(mean(report))
+
+
+# d <- rbinom(n = 100, size = 1, p = 0.75)
+
+
+```
+
+
+```{r}
+x <- seq(-5,5, by = 0.01)
+absent <- dnorm(x, mean = 0)
+present <- dnorm(x, mean = signal_mean)
+
+vis <- tibble(
+  x, absent, present
+)
+
+
+vis %>% 
+  pivot_longer(
+    c(absent, present), 
+    names_to = "Target", values_to = "vals"
+  ) %>% 
+  ggplot(aes(x = x, y = vals, color = Target, fill = Target))+
+  geom_line()+
+  geom_vline(xintercept = criterion, linetype = "dashed")+
+  labs(
+    x = "Observed value",
+    y = "Probability density"
+  )+
+  theme(legend.position = "bottom")+
+  scale_x_continuous(limits = c(-5,5))
+
+
+vis %>% 
+  pivot_longer(
+    c(absent, present), 
+    names_to = "Target", values_to = "vals"
+  ) %>% 
+  ggplot(aes(x = x, y = vals, color = Target, fill = Target))+
+  geom_line()+
+  geom_vline(xintercept = criterion, linetype = "dashed")+
+  labs(
+    x = "Observed value",
+    y = "Probability density"
+  )+
+  geom_area(data = . %>% filter(x >= criterion & Target == "present"), alpha = .25)+
+  geom_area(data = . %>% filter(x >= criterion & Target == "absent"), alpha = .25)+
+  theme(legend.position = "bottom")+
+  scale_x_continuous(limits = c(-5,5))
+
+```
+
+
+
+
+
+
+
+
