@@ -1,0 +1,254 @@
+---
+title: "seminar_4_stan"
+author: "esm"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+## Stan multilevel modelling
+
+Today we will be working on expanding our models to multi-level model, also known as hierarchical models.
+
+These are very useful for dealing with data which has some grouping structure; e.g., we have data multiple individuals, which we assume to both have some similarities, but also some differences. Modelling these types of data as multi-level allows us to account for this.
+
+To work up to this, we will first try out different approaches to dealing with grouped data.
+
+These include:
+
+1.  Complete pooling, i.e., ignore grouping structure and fit as a single unit. We only get group-level parameter estimates, but is cheap and easy. however, our estimates might not actually describe any individuals in our group. Also, we get no estimate of with-in individual variance, or between individual differences.
+2.  No pooling, i.e., fit the model to each individual, independently of each other. This can work well for large number of trials, but makes it difficult to summarise parameters at the group level correctly without throwing away uncertainty in parameter estimates. In cases with unbalanced number of trials, this becomes even more challenging.
+3.  Partial pooling, i.e., fit a multi-level model, which gives us the best of both worlds; we model the parameters of individuals as belonging to a distribution, which thus directly summarises the parameter at the group level. We set priors on these group-level parameters, and the model "learns" the priors to use for the individual level parameters. Computionally costly, as the parameter count can quickly grow large (also somewhat true for many individual fits, though less so).
+
+```{r}
+library(cmdstanr)
+library(tidyverse)
+library(posterior)
+library(tidybayes)
+library(bayesplot)
+library(patchwork)
+```
+
+We will first generate some linear correlated data, with a grouping structure:
+
+```{r}
+set.seed(42)
+k <- 15 # number of groups/individuals
+k_trials <- sample(5:30, size = k, replace = TRUE) # number of obs for each individual (might vary in the real world)
+n <- k_trials %>% sum()
+
+slope_mu <- 1
+slope_sigma <- 1
+
+int_mu <- .5
+int_sigma <- 3
+
+k_sigma <- 2
+
+k_slopes <- rnorm(k, mean = slope_mu, sd = slope_sigma)
+k_ints <- rnorm(k, mean = int_mu, sd = int_sigma)
+dtrue <- tibble(
+  id = 1:k,
+  k_trials = k_trials,
+  i = k_ints,
+  s = k_slopes
+)
+
+d <- tibble(
+  id = rep(1:k, times = k_trials),
+  x = rnorm(n, sd = 2),
+  y = rep(k_ints, times = k_trials) + rep(k_slopes, times = k_trials) * x + rnorm(n = n, sd = k_sigma)
+)
+
+
+d %>% 
+  ggplot(aes(x, y, color = factor(id)))+
+  geom_point()+
+  geom_abline(data = dtrue, aes(intercept = i, slope = s, color = factor(id)))
+
+d %>% 
+  ggplot(aes(x, y))+
+  geom_point()+
+  geom_abline(intercept = int_mu, slope = slope_mu)
+
+```
+
+Compile models: complete pooling, no pooling, and a simple, and an optimised partial pooling model
+
+```{r}
+cp <- cmdstan_model("models/linear_complete_pooling.stan")
+np <- cmdstan_model("models/linear_no_pooling.stan")
+pp <- cmdstan_model("models/linear_partial_pooling.stan")
+ppo <- cmdstan_model("models/linear_partial_pooling_optimised.stan")
+
+# plot of some different options of priors on sigma
+tibble(
+  x = seq(0, 10, by = 0.01),
+  lognorm = dnorm(log(x), mean = 0, sd = 1)/x,
+  expprior = dexp(x, 1),
+  halfnorm = dnorm(x)*2
+) %>% 
+  ggplot(aes(x))+
+  geom_line(aes(y = lognorm, color = "lognorm"))+
+  geom_line(aes(y = halfnorm, color = "halfnorm"))+
+  geom_line(aes(y = expprior, color = "exp"))+
+  xlim(-1, 10)
+
+getwd()
+```
+
+Fit all 4 models
+
+```{r}
+cp_f <- cp$sample(
+  data = list(
+    n = nrow(d),
+    y = d$y,
+    x = d$x
+  ),
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 1000,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+)
+
+np_f <- np$sample(
+  data = list(
+    n = nrow(d),
+    y = d$y,
+    x = d$x,
+    k = length(unique(d$id)),
+    id = d$id
+  ),
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 1000,
+  iter_warmup = 1000,
+  iter_sampling = 1000
+)
+ybar <- mean(d$y)
+xbar <- mean(d$x)
+xsd <- sd(d$x)
+
+pp_f <- pp$sample(
+  data = list(
+    n = nrow(d),
+    y = d$y,
+    x = d$x,
+    k = length(unique(d$id)),
+    id = d$id
+  ),
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 1000,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  # adapt_delta = .95,
+  # max_treedepth = 15
+)
+
+ppo_f <- ppo$sample(
+  data = list(
+    n = nrow(d),
+    y = d$y,
+    x = d$x,
+    k = length(unique(d$id)),
+    id = d$id
+  ),
+  chains = 4,
+  parallel_chains = 4,
+  refresh = 1000,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+)
+
+```
+
+```{r}
+dplot <- geom_point(data = d, aes(x, y, color = factor(id)), show.legend = F)
+truelines <- geom_abline(data = dtrue, aes(intercept = i, slope = s, color = factor(id)), linetype = "dotted")
+                         
+p1 <- cp_f %>% 
+  spread_draws(beta0, beta1) %>% 
+  expand_grid(x = seq(from = min(d$x), to = max(d$x), length.out = 101)) %>% 
+  mutate(
+    pred = beta0 + beta1 * x
+  ) %>% 
+  ggplot(aes(x = x, y = pred))+
+  dplot+
+  stat_lineribbon(color = "black",fill = "black", .width = .89, alpha = .25)+
+  ggtitle("Complete pooling")
+  
+  
+p2 <- np_f %>% 
+  spread_draws(beta0[id], beta1[id]) %>% 
+  expand_grid(x = seq(from = min(d$x), to = max(d$x), length.out = 101)) %>% 
+  mutate(
+    pred = beta0 + beta1 * x
+  ) %>% 
+  ggplot(aes(x = x, y = pred, color = factor(id), fill = factor(id)))+
+  dplot+
+  stat_lineribbon(.width = .89, alpha = .25)+
+  # stat_summary(fun = "mean", geom = "line", linewidth = 1)+
+  ggtitle("No pooling")
+
+p3 <- pp_f %>% 
+  spread_draws(beta0_mu, beta1_mu) %>%
+  expand_grid(x = seq(from = min(d$x), to = max(d$x), length.out = 101)) %>% 
+  mutate(
+    pred = beta0_mu + beta1_mu * x
+  ) %>% 
+  ggplot(aes(x = x, y = pred))+
+  dplot+
+  stat_lineribbon(color = "black", fill = "black",.width = .89, alpha = .25)+
+  # stat_summary(fun = "mean", geom = "line", linewidth = 1)+
+  ggtitle("Partial pooling, group estimates")
+
+p4 <- pp_f %>% 
+  spread_draws(beta0[id], beta1[id]) %>%  
+  expand_grid(x = seq(from = min(d$x), to = max(d$x), length.out = 101)) %>% 
+  mutate(
+    pred = beta0 + beta1 * x
+  ) %>% 
+  ggplot(aes(x = x, y = pred, color = factor(id), fill = factor(id)))+
+  dplot+
+  stat_lineribbon(.width = .89, alpha = .25)+
+  # stat_summary(fun = "mean", geom = "line", linewidth = 1)+
+  ggtitle("Partial pooling, individual estimates")
+
+
+# p1
+# p2
+# p3
+# p4
+
+p_all <- (p1+p2+p3+p4)+
+  plot_layout(guides = "collect")&
+  theme_minimal()+
+  theme(legend.position = "bottom", legend.direction = "horizontal")
+  
+p_all
+p4+truelines
+
+
+```
+
+```{r}
+pp_f %>% 
+  gather_draws(beta0[id], beta1[id], ndraws = 100) %>% 
+  ggplot(aes(x = id, y = .value, color = .variable))+
+  facet_grid(cols = vars(.variable))+
+  stat_pointinterval()
+
+pp_f %>% 
+  gather_draws(beta0[id], beta1[id]) %>% 
+  mode_hdci() %>%
+  ggplot() +
+  facet_grid(cols = vars(.variable)) +
+  geom_pointinterval(aes(x = id, y = .value, ymin = .lower, ymax = .upper))+
+  geom_point(data = dtrue %>% rename(beta0 = i, beta1 = s) %>% pivot_longer(c(beta0, beta1), names_to = ".variable", values_to = "val"), aes(x = id+ .3, y = val), color = "red", alpha = .5)
+
+
+```

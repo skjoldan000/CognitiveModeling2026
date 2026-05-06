@@ -1,0 +1,31 @@
+---
+title: "seminar_4_stan_sdt_exercises"
+author: "esm"
+format: html
+editor: visual
+---
+
+## SDT Stan exercises
+
+These exercises are for getting you comfortable with working with Stan, by yourself. We will practice on modelling some SDT data, to start with something familiar.
+
+```{r}
+library(cmdstanr)
+library(tidyverse)
+library(posterior)
+library(tidybayes)
+library(bayesplot)
+library(patchwork)
+```
+
+We will work with some real data:
+
+```{r}
+d <- read_csv("sdt_data.csv")
+```
+
+Here is a about 6000 trials from 17 individuals. It is from a task performed in VR, where the participants are task to move their hand past a presented visual target. The visual feedback of the hand may be either slightly faster or slower than their true movement speed, as indicated by the offsetGainLinear var: 0 corresponds to true speed, 1 corresponds to +6%, and 2 corresponds to +12%. likewise for negative values.
+
+Their response is given in UserInputF.
+
+Additionally, vibration motors were placed on the agonist and antagonist muscle of the arm, which can bias the feedback signals from the muscles, which indicate movement speed. Your goal is to work towards a Bernoulli model with a probit link function (same style of model SDT) which lets us estimate the perceived change in movement speed due to agonist/antagonist vibration, if any (we will see how far you get).
