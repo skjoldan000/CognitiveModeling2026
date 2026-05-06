@@ -114,7 +114,6 @@ f2
 
 ```
 
-
 ```{r}
 m3 <- cmdstan_model("week3/class_models/funnel_centered.stan")
 
@@ -145,9 +144,6 @@ f4 <- m3$sample(
 mcmc_trace(f3$draws(c("y")))
 
 ```
-
-
-
 
 ```{r}
 n <- 1000
@@ -217,7 +213,6 @@ d %>% summarise(mean(report))
 
 ```
 
-
 ```{r}
 x <- seq(-5,5, by = 0.01)
 absent <- dnorm(x, mean = 0)
@@ -262,11 +257,3 @@ vis %>%
   scale_x_continuous(limits = c(-5,5))
 
 ```
-
-
-
-
-
-
-
-

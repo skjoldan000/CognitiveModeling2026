@@ -28,4 +28,8 @@ Here is a about 6000 trials from 17 individuals. It is from a task performed in 
 
 Their response is given in UserInputF.
 
-Additionally, vibration motors were placed on the agonist and antagonist muscle of the arm, which can bias the feedback signals from the muscles, which indicate movement speed. Your goal is to work towards a Bernoulli model with a probit link function (same style of model SDT) which lets us estimate the perceived change in movement speed due to agonist/antagonist vibration, if any (we will see how far you get).
+Additionally, vibration motors were placed on the agonist and antagonist muscle of the arm, which can bias the feedback signals from the muscles, which indicate movement speed.
+
+Your goal is to work towards a Bernoulli model with a probit link function (same style of model SDT) which lets us estimate the perceived change in movement speed due to agonist/antagonist vibration (you will also need to estimate the effect of the visual speed gain for this), while also accounting for the grouping structure.
+
+Secondly, you will need to think about how to interpret the estimated parameters; this might include plots, comparisons with the raw data, etc.
