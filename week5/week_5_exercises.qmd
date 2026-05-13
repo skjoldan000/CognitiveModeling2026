@@ -1,0 +1,150 @@
+---
+title: "Week 5: BTL and EBA exercises"
+author: "esm"
+format: html
+editor: visual
+---
+
+## Exercises
+
+The focus this week is to compare different models to make a decision which one provides a better fit. We perform model comparisons. To get started with this, we use data from a rather classic study (Rumelhart & Greeno, 1971), who modelled the preference of meeting different celebrities. We need the eba package which contains the necessary dataset "celebrities".
+
+We will be working with the BTL and EBA models, in Stan.
+
+Note: I have changed the btl and eba models to use probit instead of logit link function. Hopefully this helps a bit with the familiarity of the models, just be aware that they are changed slightly, meaning that the results are on a different (though comparable) scale :) Models can easily be re-specified to logit scale with 1 line change if you prefer.
+
+Attempt to complete up to and including question 4 for the assignment.
+
+```{r}
+# install.packages("eba")
+library(eba)
+library(cmdstanr)
+library(tidyverse)
+library(posterior)
+library(tidybayes)
+library(bayesplot)
+library(patchwork)
+```
+
+## Exercise 1
+
+Familiarise yourself with the data in celebrities. Write a few comments on what it represents.
+
+```{r}
+data(celebrities) # load dataset from lba package
+celebrities
+```
+
+## Exercise 2
+
+I have provided a starting point in terms transforming the data to be compatible with Stan, and have provided a stan implementation of the BLT and EBA models.
+
+-   A. Run the following block, and inspect the pair_data object to see how it maps to the original celebrities matrix.
+
+-   B. Open the btl.stan file, and have a look through the model code; write, in your own words, how the model works as well as you can.
+
+-   C. Next, compile and fit the btl.stan model, and interpret the results.\
+    Consider a plot which can summarise your posterior parameter estimates, by plotting these in relation to the original data.\
+    Write a few comments regarding your findings; do they seem to fit the original data well? Does the model struggle in any particular area?
+
+```{r}
+
+make_pair_data <- function(choice_mat) {
+  I <- nrow(choice_mat)
+
+  item1 <- c()
+  item2 <- c()
+  y <- c()
+  n <- c()
+
+  for (i in 1:(I - 1)) {
+    for (j in (i + 1):I) {
+      item1 <- c(item1, i)
+      item2 <- c(item2, j)
+
+      y_ij <- choice_mat[i, j]
+      y_ji <- choice_mat[j, i]
+
+      y <- c(y, y_ij)
+      n <- c(n, y_ij + y_ji)
+    }
+  }
+
+  list(
+    I = I,
+    P = length(y),
+    item1 = item1,
+    item2 = item2,
+    y = y,
+    n = n
+  )
+}
+
+
+pair_data <- make_pair_data(celebrities)
+
+pair_data
+```
+
+## Exercise 3
+
+In this exercise you will need to fit the EBA model. I have provided a function below to produce the aspects matrix, which defines an assumed grouping structure in the data, here according to whether the celebrity is a politician, athlete or movie star.
+
+-   A. Inspect the X matrix, and create the eba_data object.
+
+-   B. Inspect the eba.stan file, and describe in your own words how it works. Note the similarity to the BTL model.
+
+-   C. Fit the eba.stan model, and interpret the results. Continue on the plot from exercise two, or create a new one, which summarises both the BLT and EBA model in their fit to the data. Write a few comments on the relative fits of both models to the data. Does the EBA appear better in any respects?
+
+```{r}
+make_incidence_matrix <- function() {
+  X <- diag(9)
+  X <- cbind(X, c(rep(1, 3), rep(0, 3), rep(0, 3))) # policiticians
+  X <- cbind(X, c(rep(0, 3), rep(1, 3), rep(0, 3))) # athletes
+  X <- cbind(X, c(rep(0, 3), rep(0, 3), rep(1, 3))) # movie stars
+  return(X)
+}
+
+X <- make_incidence_matrix()
+
+eba_data <- c(
+  pair_data,
+  list(
+    A = ncol(X), # number of unique aspects, incl individual and grouping
+    X = X
+  )
+)
+```
+
+## Exercise 4
+
+Now that we have plotted and summarised the two models, we wish to do some more formal model comparison. For this we will use PSIS-LOO-CV.
+
+-   A. Go to the stan code of both models, and add a generated quantities block. Add a calculation for the loglikelihood of each observation, for each draw (see sdt_simple_with_gen_quants.stan for example approach).
+
+-   B. Re-compile and refit both models (remember, adding the generated quantities block does not actually affect fitting, only saves additional data).
+
+-   C. Compare both models with LOO. You can use the following code structure for this (will only work once you save loglikelihood for each obs, here called "log_lik").
+
+-   D. What does our our model comparison tell us? What exactly does our LOO-CV comparison show? Write a few comments with your conclusions.
+
+```{r}
+btl_fit_loo <- btl_fit$loo(variables = "log_lik", moment_match = TRUE)
+
+eba_fit_loo <- eba_fit$loo(variables = "log_lik", moment_match = TRUE)
+
+# printing the results of each will also tell us if any obs are problematic for loo. If they are, you can add fit$loo(moment_match = TRUE), which better accounts for the outlier data. will take a fair bit longer to run.
+btl_fit_loo 
+eba_fit_loo
+loo_compare(list(EBA = eba_fit_loo, BTL = btl_fit_loo))
+```
+
+## Exercise 5 
+
+Write out the likelihood functions for BTL and EBA and fit with optim() - consider the functions we used for MDS as inspiration. Compare results with your Bayesian estimates, and the observed data.
+
+## Exercise 6
+
+EBA can handle items appearing in multiple categories. Consider other categories which raters may have used in the current dataset: nationality, gender, currently active (at time of data collection), etc.
+
+Construct a new coincidence matrix and refit; use LOO-CV to check if your new model is better at predicting unseen data.
